@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #
 # This file is licensed under the terms of the GPL, Version 3
-# 
+#
 # Copyright 2016 Dario Carluccio <check_owserver.at.carluccio.de>
 
 __author__ = "Dario Carluccio"
@@ -15,7 +15,7 @@ import signal
 import socket
 import time
 import sys
-import mosquitto
+import paho.mqtt.client as mqtt
 import argparse
 import ConfigParser
 import ow
@@ -23,13 +23,14 @@ import setproctitle
 from datetime import datetime, timedelta
 
 parser = argparse.ArgumentParser( formatter_class=argparse.RawDescriptionHelpFormatter,
-description='''Reads sensors from owserver and publishes the temperatures to an MQTT broker''')
+description='''Reads sensors from owserver and publishes the values to an MQTT broker''')
 parser.add_argument('config_file', metavar="<config_file>", help="file with configuration")
 # parser.add_argument("-v", "--verbose", help="increase log verbosity", action="store_true")
 args = parser.parse_args()
 
 # read and parse config file
 config = ConfigParser.RawConfigParser()
+config.optionxform = str
 config.read(args.config_file)
 # [mqtt]
 MQTT_HOST = config.get("mqtt", "host")
@@ -52,9 +53,9 @@ for name, value in config.items(section_name):
 APPNAME = "onewire-to-mqtt"
 setproctitle.setproctitle(APPNAME)
 MQTT_CLIENT_ID = APPNAME + "[_%d]" % os.getpid()
-MQTTC = mosquitto.Mosquitto(MQTT_CLIENT_ID)
+MQTTC = mqtt.Client(client_id=MQTT_CLIENT_ID)
 
-# init logging 
+# init logging
 LOGFORMAT = '%(asctime)-15s %(message)s'
 if VERBOSE:
     logging.basicConfig(filename=LOGFILE, format=LOGFORMAT, level=logging.DEBUG)
@@ -82,7 +83,7 @@ def on_mqtt_publish(mosq, obj, mid):
 #   3: Refused - server unavailable                                 -> RETRY
 #   4: Refused - bad user name or password (MQTT v3.1 broker only)  -> EXIT
 #   5: Refused - not authorised (MQTT v3.1 broker only)             -> EXIT
-def on_mqtt_connect(mosq, obj, return_code):
+def on_mqtt_connect(client, userdata, flags, return_code):
     logging.debug("on_connect return_code: " + str(return_code))
     if return_code == 0:
         logging.info("Connected to %s:%s", MQTT_HOST, MQTT_PORT)
@@ -142,7 +143,7 @@ def mqtt_connect():
     logging.debug("Connecting to %s:%s", MQTT_HOST, MQTT_PORT)
     # Set the last will before connecting
     MQTTC.will_set(STATUSTOPIC, "0 - LASTWILL", qos=0, retain=True)
-    result = MQTTC.connect(MQTT_HOST, MQTT_PORT, 60, True)
+    result = MQTTC.connect(MQTT_HOST, MQTT_PORT, 60)
     if result != 0:
         logging.info("Connection failed with error code %s. Retrying", result)
         time.sleep(10)
@@ -183,13 +184,12 @@ def main_loop():
         for owid, owtopic in SENSORS.items():
             logging.debug(("Querying %s : %s") % (owid, owtopic))
             try:
-                sensor = ow.Sensor(owid)
-                owtemp = sensor.temperature
-                logging.debug(("Sensor %s : %s") % (owid, owtemp))
-                MQTTC.publish(owtopic, owtemp)
+                owvalue = ow.owfs_get(owid)
+                logging.debug(("Sensor %s : %s") % (owid, owvalue))
+                MQTTC.publish(owtopic, owvalue)
 
             except ow.exUnknownSensor:
-                logging.info("Threw an unknown sensor exception for device %s - %s. Continuing", owid, owname)
+                logging.info("Threw an unknown sensor exception for device %s - %s. Continuing", owid, owtopic)
                 continue
 
             time.sleep(float(POLLINTERVAL) / len(SENSORS))
