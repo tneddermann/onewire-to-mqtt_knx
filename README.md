@@ -1,6 +1,6 @@
 # onewire-to-mqtt.py
 
-onewire-to-mqtt.py connects to [owserver](http://owfs.org/index.php?page=owserver) (from [owfs](http://owfs.org) and reads values from 1-Wire sensors.
+onewire-to-mqtt.py connects to [owserver](http://owfs.org/index.php?page=owserver) (from [owfs](http://owfs.org)) and reads values from 1-Wire sensors.
 The values aquired from owserver are published using an MQTT broker.
 
 A running [owserver](http://owfs.org/index.php?page=owserver) and an MQTT broker (e.g: [mosquitto](https://mosquitto.org)) are required to use this daemon.
