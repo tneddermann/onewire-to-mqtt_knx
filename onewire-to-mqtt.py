@@ -17,7 +17,7 @@ import time
 import sys
 import mosquitto
 import argparse
-import ConfigParser
+import configparser
 import ow
 import setproctitle
 from datetime import datetime, timedelta
@@ -29,7 +29,7 @@ parser.add_argument('config_file', metavar="<config_file>", help="file with conf
 args = parser.parse_args()
 
 # read and parse config file
-config = ConfigParser.RawConfigParser()
+config = configparser.RawConfigParser()
 config.read(args.config_file)
 # [mqtt]
 MQTT_HOST = config.get("mqtt", "host")
@@ -163,7 +163,7 @@ def main_loop():
     logging.debug(("pollinterval   : %s") % (str(POLLINTERVAL)))
     logging.debug(("statustopic    : %s") % (str(STATUSTOPIC)))
     logging.debug(("sensors        : %s") % (len(SENSORS)))
-    for owid, owtopic in SENSORS.items():
+    for owid, owtopic in list(SENSORS.items()):
         logging.debug(("  %s : %s") % (owid, owtopic))
 
     # Connect to the broker and enter the main loop
@@ -179,7 +179,7 @@ def main_loop():
         ow._put("/simultaneous/temperature","1")
         item = 0
         # iterate over all sensors
-        for owid, owtopic in SENSORS.items():
+        for owid, owtopic in list(SENSORS.items()):
             logging.debug(("Querying %s : %s") % (owid, owtopic))
             try:
                 sensor = ow.Sensor(owid)
