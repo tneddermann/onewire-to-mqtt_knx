@@ -25,14 +25,15 @@ ExecStart=/usr/bin/python /usr/local/onewire-to-mqtt/onewire-to-mqtt.py /usr/loc
 WantedBy=multi-user.target
 -----------------------------------------------
 
-4) Set Rightes on Unit File
+4) Set Rights on Unit File
 chmod 644 /lib/systemd/system/onewire-to-mqtt.service
 
 5) Configure systemd
 systemctl daemon-reload
 systemctl enable onewire-to-mqtt.service
 
-6) Reboot 
+6) Restart service
+systemctl restart onewire-to-mqtt.service
 
 7) Check status of onewire-to-mqtt service:
 systemctl status onewire-to-mqtt.service

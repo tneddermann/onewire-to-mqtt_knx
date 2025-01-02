@@ -7,7 +7,7 @@
 __author__ = "Dario Carluccio"
 __copyright__ = "Copyright (C) Dario Carluccio"
 __license__ = "GPLv3"
-__version__ = "1.0"
+__version__ = "1.1"
 
 import os
 import logging
@@ -15,7 +15,7 @@ import signal
 import socket
 import time
 import sys
-import mosquitto
+import paho.mqtt.client as mqtt
 import argparse
 import configparser
 import ow
@@ -23,13 +23,13 @@ import setproctitle
 from datetime import datetime, timedelta
 
 parser = argparse.ArgumentParser( formatter_class=argparse.RawDescriptionHelpFormatter,
-description='''reads temperature sensors from onewire-server and
-publishes the temperaturs to a mqtt-broker''')
+description='''Reads sensors from owserver and publishes the values to an MQTT broker''')
 parser.add_argument('config_file', metavar="<config_file>", help="file with configuration")
 args = parser.parse_args()
 
 # read and parse config file
 config = configparser.RawConfigParser()
+config.optionxform = str
 config.read(args.config_file)
 # [mqtt]
 MQTT_HOST = config.get("mqtt", "host")
@@ -52,7 +52,7 @@ for name, value in config.items(section_name):
 APPNAME = "onewire-to-mqtt"
 setproctitle.setproctitle(APPNAME)
 MQTT_CLIENT_ID = APPNAME + "[_%d]" % os.getpid()
-MQTTC = mosquitto.Mosquitto(MQTT_CLIENT_ID)
+MQTTC = mqtt.Client(client_id=MQTT_CLIENT_ID)
 
 # init logging
 LOGFORMAT = '%(asctime)-15s %(message)s'
@@ -71,7 +71,7 @@ else:
 
 # MQTT: message is published
 def on_mqtt_publish(mosq, obj, mid):
-    logging.debug("MID " + str(mid) + " published.")
+    logging.debug("MID " + str(mid) + " published")
 
 # MQTT: connection to broker
 # client has received a CONNACK message from broker
@@ -82,7 +82,7 @@ def on_mqtt_publish(mosq, obj, mid):
 #   3: Refused - server unavailable                                 -> RETRY
 #   4: Refused - bad user name or password (MQTT v3.1 broker only)  -> EXIT
 #   5: Refused - not authorised (MQTT v3.1 broker only)             -> EXIT
-def on_mqtt_connect(mosq, obj, return_code):
+def on_mqtt_connect(client, userdata, flags, return_code):
     logging.debug("on_connect return_code: " + str(return_code))
     if return_code == 0:
         logging.info("Connected to %s:%s", MQTT_HOST, MQTT_PORT)
@@ -91,23 +91,23 @@ def on_mqtt_connect(mosq, obj, return_code):
         # process_connection()
     elif return_code == 1:
         logging.info("Connection refused - unacceptable protocol version")
-        cleanup()
+        cleanup(return_code)
     elif return_code == 2:
         logging.info("Connection refused - identifier rejected")
-        cleanup()
+        cleanup(return_code)
     elif return_code == 3:
         logging.info("Connection refused - server unavailable")
         logging.info("Retrying in 10 seconds")
         time.sleep(10)
     elif return_code == 4:
         logging.info("Connection refused - bad user name or password")
-        cleanup()
+        cleanup(return_code)
     elif return_code == 5:
         logging.info("Connection refused - not authorised")
-        cleanup()
+        cleanup(return_code)
     else:
         logging.warning("Something went wrong. RC:" + str(return_code))
-        cleanup()
+        cleanup(return_code)
 
 # MQTT: disconnected from broker
 def on_mqtt_disconnect(mosq, obj, return_code):
@@ -125,8 +125,8 @@ def on_mqtt_log(mosq, obj, level, string):
 ### END of MQTT Callback handler ###
 
 
-# clean disconnect on SIGTERM or SIGINT.
-def cleanup(signum, frame):
+# clean disconnect on SIGTERM or SIGINT
+def cleanup(signum, frame = None):
     logging.info("Disconnecting from broker")
     # Publish a retained message to state that this client is offline
     MQTTC.publish(STATUSTOPIC, "0 - DISCONNECT", retain=True)
@@ -141,7 +141,7 @@ def mqtt_connect():
     logging.debug("Connecting to %s:%s", MQTT_HOST, MQTT_PORT)
     # Set the last will before connecting
     MQTTC.will_set(STATUSTOPIC, "0 - LASTWILL", qos=0, retain=True)
-    result = MQTTC.connect(MQTT_HOST, MQTT_PORT, 60, True)
+    result = MQTTC.connect(MQTT_HOST, MQTT_PORT, 60)
     if result != 0:
         logging.info("Connection failed with error code %s. Retrying", result)
         time.sleep(10)
@@ -182,13 +182,12 @@ def main_loop():
         for owid, owtopic in list(SENSORS.items()):
             logging.debug(("Querying %s : %s") % (owid, owtopic))
             try:
-                sensor = ow.Sensor(owid)
-                owtemp = sensor.temperature
-                logging.debug(("Sensor %s : %s") % (owid, owtemp))
-                MQTTC.publish(owtopic, owtemp)
+                owvalue = ow.owfs_get(owid)
+                logging.debug(("Sensor %s : %s") % (owid, owvalue))
+                MQTTC.publish(owtopic, owvalue)
 
             except ow.exUnknownSensor:
-                logging.info("Threw an unknown sensor exception for device %s - %s. Continuing", owid, owname)
+                logging.info("Threw an unknown sensor exception for device %s - %s. Continuing", owid, owtopic)
                 continue
 
             time.sleep(float(POLLINTERVAL) / len(SENSORS))
