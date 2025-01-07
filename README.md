@@ -1,9 +1,9 @@
 # onewire-to-mqtt.py
 
-onewire-to-mqtt.py connects to [owserver](http://owfs.org/index.php?page=owserver) (from [owfs](http://owfs.org)) and reads values from 1-Wire sensors.
-The values aquired from owserver are published using an MQTT broker.
+Onewire-to-mqtt.py is intended to run as a service, it accesses [owfs](https://owfs.org/index_php_page_owfs.html) and reads values from 1-Wire sensors.
+The values aquired from owfs are published using an MQTT broker.
 
-A running [owserver](http://owfs.org/index.php?page=owserver) and an MQTT broker (e.g: [mosquitto](https://mosquitto.org)) are required to use this daemon.
+A running [owserver](https://owfs.org/index_php_page_owserver.html) with [owfs](https://owfs.org/index_php_page_owfs.html) and an MQTT broker (e.g: [mosquitto](https://mosquitto.org)) are required to use this daemon.
 
 ## Usage
 
@@ -12,7 +12,7 @@ A configuration file is the only parameter which has to be passed to the program
 ```
 usage: onewire-to-mqtt.py [-h] <config_file>
 
-Reads sensors from owserver and publishes the values to an MQTT broker
+Reads sensors from owfs and publishes the values to an MQTT broker
 
 positional arguments:
   <config_file>  file with configuration
@@ -29,7 +29,7 @@ optional arguments:
 
 ## Configuration file
 
-A self explanatory sample configuration file is included.
+A self explaining sample configuration file is included.
 
 ```
 # sample configuration 
@@ -38,6 +38,9 @@ A self explanatory sample configuration file is included.
 [mqtt]
 host = 127.0.0.1
 port = 1883
+# user and pw optional, leave empty if not necessary
+user = mqtt
+pw = 12345678
 
 # polling interval for sensors
 pollinterval = 30
@@ -47,35 +50,33 @@ statustopic = onewire-to-mqtt/status
 
 # Onewire related config 
 [onewire]
-host= 127.0.0.1
-port = 4304      
+# 1wire needs to be available via owfs on the local file system, where owserver might connect to a different IP adress
+dir = /mnt/1wire
 
 [log]
-verbose = false
+loglevel = 0
 logfile = /var/log/onewire-to-mqtt.log
 
-# list of sensors to be polled and according mqtt topics 
+# list of sensors to be polled and according mqtt topics
+# might be sensors IDs or aliases provided in the owfs config
 [sensors]
 26.C51B8C000000/B1-R1-A/pressure = hhv7/jordkallare/pressure
 26.C51B8C000000/humidity = hhv7/jordkallare/humidity
 10.F19884010800/temperature = hhv7/jordkallare/temperature
+basement_livingroom/temperature = homeassistant/sensor/basement_livingroom/temperature
 ```
 
 ## Libraries required 
 The following libraries are required by onewire-to-mqtt.py 
-- paho-mqtt (tested with version: 1.3.1) 
-- owpython (tested with version: 2.9p8)
-- setproctitle (tested with version: 1.1.10)
+- paho-mqtt (tested with version: 1.6.1-1)
+- setproctitle (tested with version: 1.3.1-1+b2)
 
 If on a Debian(/Ubuntu/etc) system, install with
 ```
-apt-get install python-ow python-pip
-pip install paho-mqtt
-pip install setproctitle
-
+apt-get install python3-paho-mqtt python3-setproctitle
 ```
 
 ## References 
 - https://mosquitto.org
 - http://owfs.org
-- http://owfs.org/index.php?page=owserver
+- https://owfs.org/index_php_page_owfs.html

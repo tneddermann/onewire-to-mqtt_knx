@@ -18,7 +18,6 @@ import sys
 import paho.mqtt.client as mqtt
 import argparse
 import configparser
-import ow
 import setproctitle
 from datetime import datetime, timedelta
 
@@ -36,9 +35,10 @@ MQTT_HOST = config.get("mqtt", "host")
 MQTT_PORT = config.getint("mqtt", "port")
 STATUSTOPIC = config.get("mqtt", "statustopic")
 POLLINTERVAL = config.getint("mqtt", "pollinterval")
+MQTT_USER = config.get("mqtt", "user")
+MQTT_PW = config.get("mqtt", "pw")
 # [Onewire]
-OW_HOST = config.get("onewire", "host")
-OW_PORT = config.get("onewire", "port")
+OW_DIR = config.get("onewire", "dir")
 # [log]
 LOGFILE = config.get("log", "logfile")
 LOGLEVEL = config.getint("log", "loglevel")
@@ -139,6 +139,11 @@ def cleanup(signum, frame = None):
 # init connection to MQTT broker
 def mqtt_connect():
     logging.debug("Connecting to %s:%s", MQTT_HOST, MQTT_PORT)
+
+    # Set username and password in case it is provided
+    if not MQTT_USER == "" :
+        MQTTC.username_pw_set(MQTT_USER, MQTT_PW)
+        
     # Set the last will before connecting
     MQTTC.will_set(STATUSTOPIC, "0 - LASTWILL", qos=0, retain=True)
     result = MQTTC.connect(MQTT_HOST, MQTT_PORT, 60)
@@ -156,8 +161,7 @@ def mqtt_connect():
 
 # Main Loop
 def main_loop():
-    logging.debug(("onewire server : %s") % (OW_HOST))
-    logging.debug(("  port         : %s") % (str(OW_PORT)))
+    logging.debug(("onewire dir    : %s") % (OW_DIR))
     logging.debug(("MQTT broker    : %s") % (MQTT_HOST))
     logging.debug(("  port         : %s") % (str(MQTT_PORT)))
     logging.debug(("pollinterval   : %s") % (str(POLLINTERVAL)))
@@ -169,24 +173,23 @@ def main_loop():
     # Connect to the broker and enter the main loop
     mqtt_connect()
 
-    # Connect to the broker and enter the main loop
-    ow.init(("%s:%s") % (OW_HOST, str(OW_PORT)))
-    ow.error_level(ow.error_level.fatal)
-    ow.error_print(ow.error_print.stderr)
+    # Check the folder and enter the main loop
+    if not os.path.isdir(OW_DIR):
+        logging.debug("OWFS directory \"%s\" does not exist! Aborting...", OW_DIR)
+        sys.exit(1)
 
     while True:
-        # simultaneous temperature conversion
-        ow._put("/simultaneous/temperature","1")
-        item = 0
         # iterate over all sensors
         for owid, owtopic in list(SENSORS.items()):
             logging.debug(("Querying %s : %s") % (owid, owtopic))
             try:
-                owvalue = ow.owfs_get(owid)
+                sensor = open(OW_DIR+"/"+owid, "r")
+                owvalue = sensor.read()
                 logging.debug(("Sensor %s : %s") % (owid, owvalue))
                 MQTTC.publish(owtopic, owvalue)
-
-            except ow.exUnknownSensor:
+                sensor.close()
+                
+            except FileNotFoundError:
                 logging.info("Threw an unknown sensor exception for device %s - %s. Continuing", owid, owtopic)
                 continue
 
